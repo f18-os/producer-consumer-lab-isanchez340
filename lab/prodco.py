@@ -39,8 +39,8 @@ class extractF(threading.Thread):
         print("Extracting frame {} {} ".format(count, success))
         count += 1
         while success:
-            EC.acquire()
             ECs.acquire()
+            EC.acquire()
 
             # save frame to queue
             Cframe.append(image)
@@ -51,6 +51,7 @@ class extractF(threading.Thread):
             count += 1
             EC.release()
             ECss.release()
+
         for i in range(10):
             ECss.release()
 
@@ -82,11 +83,16 @@ class convertG(threading.Thread):
             Gframe.append(grayscaleFrame)
             count += 1
 
-            EC.release()
             CD.release()
+            EC.release()
 
-            ECss.release()
-            CDs.release()
+            CDss.release()
+            ECs.release()
+        CD.release()
+        EC.release()
+        ECs.release()
+        for i in range(10):
+            CDss.release()
 
 
 class displayF(threading.Thread):
@@ -96,11 +102,7 @@ class displayF(threading.Thread):
     def run(self):
         # initialize frame count
         count = 0
-
         startTime = time.time()
-
-        # load the frame
-
         while 1 == 1:
             CDss.acquire()
             CD.acquire()
@@ -121,13 +123,11 @@ class displayF(threading.Thread):
                 # Wait for 42 ms and check if the user wants to quit
                 if cv2.waitKey(timeToWait) and 0xFF == ord("q"):
                     break
-
                     # get the start time for processing the next frame
                 startTime = time.time()
 
             else:
                 break
-
             CD.release()
             CDs.release()
         # make sure we cleanup the windows, otherwise we might end up with a mess
@@ -141,12 +141,12 @@ for i in range(10):
     ECss.acquire()
     CDss.acquire()
 
-print("Starting thread display")
-displayFrames.start()
+print("Starting thread extract")
+extractFrames.start()
 
 print("Starting thread convert")
 convertFrames.start()
 
-print("Starting thread extract")
-extractFrames.start()
+print("Starting thread display")
+displayFrames.start()
 
