@@ -1,12 +1,18 @@
 import cv2
 import os
 import time
+import threading
+import base64
+import queue
 
 outputDir    = 'frames'
 clipFileName = 'clip.mp4'
 frameDelay   = 42
 
-def extractF():
+class extractF(threading.Thread):
+    def __init__(self):
+        super(extractF, self).__init__()
+    
      # initialize frame count
     count = 0
 
@@ -29,7 +35,10 @@ def extractF():
         print('Reading frame {}'.format(count))
         count += 1
 
-def convertG():
+class convertG(threading.Thread):
+    def __init__(self):
+        super(convertG, self).__init__()
+        
     # initialize frame count
     count = 0
 
@@ -59,7 +68,10 @@ def convertG():
         # load the next frame
         inputFrame = cv2.imread(inFileName, cv2.IMREAD_COLOR)
 
-def displayF():
+class displayF(threading.Thread):
+    def __init__(self):
+        super(displayF, self).__init__()  
+
     # initialize frame count
     count = 0
 
