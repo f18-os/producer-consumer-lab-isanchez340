@@ -5,116 +5,148 @@ import threading
 import base64
 import queue
 
-outputDir    = 'frames'
-clipFileName = 'clip.mp4'
-frameDelay   = 42
+# Semaphore and lock for getting frames and converting
+EC = threading.Lock()
+ECs = threading.Semaphore(10)
+ECss = threading.Semaphore(10)
+
+# Semaphore and lock for converting and displaying
+CD = threading.Lock()
+CDs = threading.Semaphore(10)
+CDss = threading.Semaphore(10)
+
+# communication pipes for threads
+Cframe = []
+Gframe = []
+
+frameDelay = 42
 
 class extractF(threading.Thread):
     def __init__(self):
         super(extractF, self).__init__()
-    
-     # initialize frame count
-    count = 0
 
-    # open the video clip
-    vidcap = cv2.VideoCapture(clipFileName)
+    def run(self):
+        # initialize frame count
+        count = 0
 
-    # create the output directory if it doesn't exist
-    if not os.path.exists(outputDir):
-        print("Output directory {} didn't exist, creating".format(outputDir))
-        os.makedirs(outputDir)
+        # open the video clip
+        clipFileName = 'clip.mp4'
+        vidcap = cv2.VideoCapture(clipFileName)
 
-    # read one frame
-    success, image = vidcap.read()
-
-    print("Reading frame {} {} ".format(count, success))
-    while success:
-        # write the current frame out as a jpeg image
-        cv2.imwrite("{}/frame_{:04d}.jpg".format(outputDir, count), image)
+        # read one frame
         success, image = vidcap.read()
-        print('Reading frame {}'.format(count))
+
+        print("Extracting frame {} {} ".format(count, success))
         count += 1
+        while success:
+            EC.acquire()
+            ECs.acquire()
+
+            # save frame to queue
+            Cframe.append(image)
+
+
+            success, image = vidcap.read()
+            print('Extracting frame {}'.format(count))
+            count += 1
+            EC.release()
+            ECss.release()
+        for i in range(10):
+            ECss.release()
+
 
 class convertG(threading.Thread):
     def __init__(self):
         super(convertG, self).__init__()
-        
-    # initialize frame count
-    count = 0
 
-    # get the next frame file name
-    inFileName = "{}/frame_{:04d}.jpg".format(outputDir, count)
+    def run(self):
+        # initialize frame count
+        count = 0
 
-    # load the next file
-    inputFrame = cv2.imread(inFileName, cv2.IMREAD_COLOR)
+        while 1 == 1:
+            ECss.acquire()
+            CDs.acquire()
 
-    while inputFrame is not None:
-        print("Converting frame {}".format(count))
+            EC.acquire()
+            CD.acquire()
 
-        # convert the image to grayscale
-        grayscaleFrame = cv2.cvtColor(inputFrame, cv2.COLOR_BGR2GRAY)
+            if(Cframe):
+                colorF = Cframe.pop()
+            else:
+                break
 
-        # generate output file name
-        outFileName = "{}/grayscale_{:04d}.jpg".format(outputDir, count)
+            # convert the image to grayscale
+            print('Converting frame {}'.format(count))
+            grayscaleFrame = cv2.cvtColor(colorF, cv2.COLOR_BGR2GRAY)
 
-        # write output file
-        cv2.imwrite(outFileName, grayscaleFrame)
+            Gframe.append(grayscaleFrame)
+            count += 1
 
-        count += 1
+            EC.release()
+            CD.release()
 
-        # generate input file name for the next frame
-        inFileName = "{}/frame_{:04d}.jpg".format(outputDir, count)
+            ECss.release()
+            CDs.release()
 
-        # load the next frame
-        inputFrame = cv2.imread(inFileName, cv2.IMREAD_COLOR)
 
 class displayF(threading.Thread):
     def __init__(self):
         super(displayF, self).__init__()  
 
-    # initialize frame count
-    count = 0
+    def run(self):
+        # initialize frame count
+        count = 0
 
-    startTime = time.time()
-
-    # Generate the filename for the first frame
-    frameFileName = "{}/grayscale_{:04d}.jpg".format(outputDir, count)
-
-    # load the frame
-    frame = cv2.imread(frameFileName)
-
-    while frame is not None:
-
-        print("Displaying frame {}".format(count))
-        # Display the frame in a window called "Video"
-        cv2.imshow("Video", frame)
-
-        # compute the amount of time that has elapsed
-        # while the frame was processed
-        elapsedTime = int((time.time() - startTime) * 1000)
-        print("Time to process frame {} ms".format(elapsedTime))
-
-        # determine the amount of time to wait, also
-        # make sure we don't go into negative time
-        timeToWait = max(1, frameDelay - elapsedTime)
-
-        # Wait for 42 ms and check if the user wants to quit
-        if cv2.waitKey(timeToWait) and 0xFF == ord("q"):
-            break
-
-            # get the start time for processing the next frame
         startTime = time.time()
 
-        # get the next frame filename
-        count += 1
-        frameFileName = "{}/grayscale_{:04d}.jpg".format(outputDir, count)
+        # load the frame
 
-        # Read the next frame file
-        frame = cv2.imread(frameFileName)
+        while 1 == 1:
+            CDss.acquire()
+            CD.acquire()
 
-    # make sure we cleanup the windows, otherwise we might end up with a mess
-    cv2.destroyAllWindows()
+            if(Gframe):
+                frame = Gframe.pop()
+                print("Displaying frame {}".format(count))
+                cv2.imshow("Video", frame)
+                # compute the amount of time that has elapsed
+                # while the frame was processed
+                elapsedTime = int((time.time() - startTime) * 1000)
+                print("Time to process frame {} ms".format(elapsedTime))
 
-extractF()
-convertG()
-displayF()
+                # determine the amount of time to wait, also
+                # make sure we don't go into negative time
+                timeToWait = max(1, frameDelay - elapsedTime)
+
+                # Wait for 42 ms and check if the user wants to quit
+                if cv2.waitKey(timeToWait) and 0xFF == ord("q"):
+                    break
+
+                    # get the start time for processing the next frame
+                startTime = time.time()
+
+            else:
+                break
+
+            CD.release()
+            CDs.release()
+        # make sure we cleanup the windows, otherwise we might end up with a mess
+        cv2.destroyAllWindows()
+
+extractFrames = extractF()
+convertFrames = convertG()
+displayFrames = displayF()
+
+for i in range(10):
+    ECss.acquire()
+    CDss.acquire()
+
+print("Starting thread display")
+displayFrames.start()
+
+print("Starting thread convert")
+convertFrames.start()
+
+print("Starting thread extract")
+extractFrames.start()
+
