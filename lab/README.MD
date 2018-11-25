@@ -1,1 +1,2 @@
-
+# Producer Consumer Lab
+This lab takes in a video named "clip.mp4" and plays it in black and white by using a pipe as a communication method for the 3 threads use by the frame reader, coverter and displayer.
